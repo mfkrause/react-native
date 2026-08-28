@@ -25,9 +25,9 @@ struct LayoutMetrics {
   // Size: includes border, padding and content.
   Rect frame;
   // Width of the border + padding in each direction.
-  EdgeInsets contentInsets{0};
+  EdgeInsets contentInsets{};
   // Width of the border in each direction.
-  EdgeInsets borderWidth{0};
+  EdgeInsets borderWidth{};
   // See `DisplayType` for all possible options.
   DisplayType displayType{DisplayType::Flex};
   // See `PositionType` for all possible options.
