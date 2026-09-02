@@ -399,24 +399,28 @@ It is resolved in this order:
 1. `swiftpmConfig.name` in the library's package.json
 2. `spm.name` in `react-native.config.js` (deprecated)
 3. podspec `header_dir` — `React-Core` → `React`
-4. podspec name — `react-native-svg` → `RNSVG`
-5. npm package name — `react-native-svg` → `ReactNativeSvg`
+4. podspec `module_name` — `react-native-maps` → `ReactNativeMaps`
+5. podspec name — `react-native-svg` → `RNSVG`
+6. npm package name — `react-native-svg` → `ReactNativeSvg`
 
-Steps 3–4 are a **migration path, not the destination**. They exist so that
+Steps 3–5 are a **migration path, not the destination**. They exist so that
 libraries work unchanged today, a podspec being what they already ship, and
 `npx react-native spm scaffold` closes them out: it records the name it derived
 as `swiftpmConfig.name` in the library's package.json, after which the podspec
 is never consulted for naming again. A library that declares its own name needs
 no podspec for SwiftPM at all.
 
-Within those two steps, `header_dir` comes first because that is what a library
-sets when its import prefix differs from its pod name — but a `header_dir` only
-a **subspec** declares names that subspec's headers, not the library, so the pod
-name stands (react-native-svg is `RNSVG`, not `rnsvg`; its subspec prefix
-resolves through the header search paths instead). An unreadable podspec falls
-through rather than failing the build. A prefix Swift cannot spell is normalized
-— `Some.Pod` becomes `Some_Pod`, what SwiftPM would compile it as anyway — with
-a warning naming `swiftpmConfig.name`.
+Within those three steps, `header_dir` comes first because that is what a
+library sets when its import prefix differs from its pod name, then
+`module_name`, what CocoaPods compiles the module as and so what Swift and
+`@import` consumers write. But a `header_dir` only a **subspec** declares names
+that subspec's headers, not the library, so the pod name stands
+(react-native-svg is `RNSVG`, not `rnsvg`; its subspec prefix resolves through
+the header search paths instead). An unreadable podspec falls through rather
+than failing the build — with a warning, since a machine that can read it (one
+with CocoaPods installed) may resolve a different name. A prefix Swift cannot
+spell is normalized — `Some.Pod` becomes `Some_Pod`, what SwiftPM would compile
+it as anyway — with a warning naming `swiftpmConfig.name`.
 
 Two names are refused outright: one React Native reserves (`ReactNative`,
 `ReactHeaders`, `ReactNativeHeaders`, `ReactNativeDependenciesHeaders`,

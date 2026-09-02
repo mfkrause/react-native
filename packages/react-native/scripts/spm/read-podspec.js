@@ -333,6 +333,7 @@ function regexPodspec(podspecPath /*: string */) /*: RawSpec */ {
 
   return {
     name: getSpecStringField('name'),
+    module_name: getSpecStringField('module_name'),
     version: getSpecStringField('version'),
     source_files: getArrayField('source_files'),
     public_header_files: getArrayField('public_header_files'),
@@ -669,6 +670,7 @@ function flattenSubspecs(rawSpec /*: RawSpec */) /*: PodspecModel */ {
     // header_mappings_dir copy step, which SPM has no equivalent for.
     headerMappingsDirs: mergeArrayField('header_mappings_dir'),
     headerDir: specStringField('header_dir'),
+    moduleName: specStringField('module_name'),
     frameworks: mergeArrayField('frameworks'),
     weakFrameworks: mergeArrayField('weak_frameworks'),
     libraries: mergeArrayField('libraries'),
@@ -741,19 +743,19 @@ function readPodspecCached(podspecPath /*: string */) /*: PodspecModel */ {
 }
 
 /**
- * The two fields that name a library, read WITHOUT `pod ipc spec`'s process
+ * The three fields that name a library, read WITHOUT `pod ipc spec`'s process
  * spawn — name resolution runs for every dep, including self-managed ones that
  * need nothing else from the podspec.
  *
  * Null when the answer cannot be trusted without Ruby: an interpolated value,
- * or a spec-level `header_dir` the regex could not read. `header_dir` outranks
- * the name, so a literal name alone is not enough — resolving without it would
- * pick the wrong prefix. A `header_dir` only a subspec declares is not the
- * library's, so it neither answers nor defers.
+ * or a spec-level `header_dir`/`module_name` the regex could not read. Both
+ * outrank the pod name, so a literal name alone is not enough — resolving
+ * without them would pick the wrong prefix. A value only a subspec declares is
+ * not the library's, so it neither answers nor defers.
  */
 function readPodspecNames(
   podspecPath /*: string */,
-) /*: ?{name: ?string, headerDir: ?string} */ {
+) /*: ?{name: ?string, moduleName: ?string, headerDir: ?string} */ {
   const raw = regexPodspec(podspecPath);
   const field = (key /*: string */) /*: ?string */ => {
     // $FlowFixMe[prop-missing] RawSpec is dynamically shaped
@@ -764,17 +766,26 @@ function readPodspecNames(
       ? value
       : null;
   };
+  const source = readPodspecSource(podspecPath);
+  const declaredUnread = (
+    key /*: string */,
+    value /*: ?string */,
+  ) /*: boolean */ =>
+    value == null &&
+    new RegExp(`(?:^|[;|])\\s*(?:s|spec)\\.${key}\\s*=`, 'm').test(source);
+
   const name = field('name');
+  const moduleName = field('module_name');
   const headerDir = field('header_dir');
   if (
-    headerDir == null &&
-    /(?:^|[;|])\s*(?:s|spec)\.header_dir\s*=/m.test(
-      readPodspecSource(podspecPath),
-    )
+    declaredUnread('header_dir', headerDir) ||
+    declaredUnread('module_name', moduleName)
   ) {
     return null;
   }
-  return name == null && headerDir == null ? null : {name, headerDir};
+  return name == null && moduleName == null && headerDir == null
+    ? null
+    : {name, moduleName, headerDir};
 }
 
 /**

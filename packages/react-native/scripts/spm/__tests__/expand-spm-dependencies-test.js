@@ -429,7 +429,8 @@ describe('expandSpmDependencies', () => {
 // ---------------------------------------------------------------------------
 // Podspec-derived names. A dep's Swift name is also its header prefix
 // (`#import <Name/Header.h>`), and the podspec is where that prefix is
-// declared: `spm.name` → `header_dir` → podspec name → toSwiftName(npm name).
+// declared: `spm.name` → `header_dir` → `module_name` → podspec name →
+// toSwiftName(npm name).
 // ---------------------------------------------------------------------------
 
 describe('expandSpmDependencies (podspec-derived names)', () => {
@@ -456,6 +457,37 @@ describe('expandSpmDependencies (podspec-derived names)', () => {
       podspecs: {'/svg': {name: 'RNSVG', headerDir: null}},
     });
     expect(svg.swiftName).toBe('RNSVG');
+  });
+
+  it("uses the podspec's module_name over its pod name (react-native-maps)", () => {
+    // `s.name = "react-native-maps"` with `s.module_name = 'ReactNativeMaps'`:
+    // the pod name is a legal SwiftPM target name, so nothing normalizes it —
+    // but every `import ReactNativeMaps` in the ecosystem is written against
+    // the module name.
+    const [maps] = expand([dep('react-native-maps', '/maps')], {
+      podspecs: {
+        '/maps': {
+          name: 'react-native-maps',
+          moduleName: 'ReactNativeMaps',
+          headerDir: null,
+        },
+      },
+    });
+    expect(maps.swiftName).toBe('ReactNativeMaps');
+    expect(maps.swiftNameSource).toBe('podspec');
+  });
+
+  it("prefers the podspec's header_dir over its module_name", () => {
+    const [core] = expand([dep('react-native-core-thing', '/rc')], {
+      podspecs: {
+        '/rc': {
+          name: 'React-Core',
+          moduleName: 'ReactCore',
+          headerDir: 'React',
+        },
+      },
+    });
+    expect(core.swiftName).toBe('React');
   });
 
   it('takes a lowercase header_dir verbatim (worklets ships <worklets/…>)', () => {
@@ -488,10 +520,47 @@ describe('expandSpmDependencies (podspec-derived names)', () => {
   });
 
   it('falls through when the podspec yields no name (partial parse)', () => {
-    const [svg] = expand([dep('react-native-svg', '/svg')], {
-      podspecs: {'/svg': {name: '', headerDir: null}},
-    });
-    expect(svg.swiftName).toBe('ReactNativeSvg');
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const [svg] = expand([dep('react-native-svg', '/svg')], {
+        podspecs: {'/svg': {name: '', headerDir: null}},
+      });
+      expect(svg.swiftName).toBe('ReactNativeSvg');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('warns that a podspec it could not read makes the name machine-dependent', () => {
+    // The shape create-react-native-library generates: `s.name = package["name"]`
+    // reads as nothing without CocoaPods, so the npm name answers here and the
+    // pod name would answer on a machine that has `pod`.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const [foo] = expand([dep('react-native-foo', '/foo')], {
+        podspecs: {'/foo': {name: '', headerDir: null}},
+      });
+      expect(foo.swiftName).toBe('ReactNativeFoo');
+      expect(foo.swiftNameSource).toBe('npm');
+      const message = warnSpy.mock.calls.map(call => call.join(' ')).join('\n');
+      expect(message).toContain('react-native-foo');
+      expect(message).toContain('CocoaPods');
+      expect(message).toContain('swiftpmConfig.name');
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('says nothing when the dep ships no podspec at all', () => {
+    // Nothing is machine-dependent about a self-managed library: there is no
+    // podspec for another machine to read differently.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expand([dep('react-native-svg', '/svg')]);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('normalizes a podspec name Swift cannot spell, and says what it did', () => {
@@ -515,11 +584,16 @@ describe('expandSpmDependencies (podspec-derived names)', () => {
     // Without CocoaPods the regex parser hands back the template verbatim.
     // Naming from it would freeze `__s_name_Headers` into the header prefix —
     // and, being podspec-derived, into the library's package.json.
-    const [svg] = expand([dep('react-native-svg', '/svg')], {
-      podspecs: {'/svg': {name: 'RNSVG', headerDir: '#{s.name}Headers'}},
-    });
-    expect(svg.swiftName).toBe('ReactNativeSvg');
-    expect(svg.swiftNameSource).toBe('npm');
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const [svg] = expand([dep('react-native-svg', '/svg')], {
+        podspecs: {'/svg': {name: 'RNSVG', headerDir: '#{s.name}Headers'}},
+      });
+      expect(svg.swiftName).toBe('ReactNativeSvg');
+      expect(svg.swiftNameSource).toBe('npm');
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('normalizes an unspellable header_dir rather than falling back to the podspec name', () => {

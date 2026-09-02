@@ -426,6 +426,10 @@ export type PodspecModel = {
   // physical source tree (SPM has no header_mappings_dir copy step).
   headerMappingsDirs: Array<string>,
   headerDir: ?string,
+  // What CocoaPods compiles the module as, and so what Swift and `@import`
+  // consumers spell (`s.module_name`). Defaults to the pod name in CocoaPods;
+  // null here when the podspec does not declare it.
+  moduleName: ?string,
   frameworks: Array<string>,
   weakFrameworks: Array<string>,
   libraries: Array<string>,

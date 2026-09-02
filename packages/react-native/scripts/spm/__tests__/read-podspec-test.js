@@ -101,6 +101,15 @@ Pod::Spec.new do |s|
 end
 `;
 
+const MAPS_LIKE_PODSPEC = `
+Pod::Spec.new do |s|
+  s.name        = "react-native-maps"
+  s.module_name = 'ReactNativeMaps'
+  s.version     = "1.20.0"
+  s.source_files = "ios/**/*.{h,m,mm}"
+end
+`;
+
 const HEADER_SEARCH_PATHS_PODSPEC = `
 Pod::Spec.new do |s|
   s.name = "react-native-thing"
@@ -602,6 +611,21 @@ describe('flattenSubspecs (spec-level identity)', () => {
     expect(model.sourceFiles).toEqual(['common/cpp/**/*.{cpp,h}']);
   });
 
+  it("keeps the spec's own module_name, not a subspec's", () => {
+    const model = flattenSubspecs({
+      name: 'react-native-maps',
+      version: '1.20.0',
+      module_name: 'ReactNativeMaps',
+      subspecs: [{name: 'react-native-maps/cxx', module_name: 'MapsCxx'}],
+    });
+    expect(model.moduleName).toBe('ReactNativeMaps');
+  });
+
+  it('reports a missing module_name as null', () => {
+    const model = flattenSubspecs({name: 'RNSVG', version: '15.0.0'});
+    expect(model.moduleName).toBeNull();
+  });
+
   it('keeps a spec-level header_dir', () => {
     const model = flattenSubspecs({
       name: 'React-Core',
@@ -622,6 +646,7 @@ describe('readPodspecNames', () => {
     try {
       expect(readPodspecNames(file)).toEqual({
         name: 'RNReanimated',
+        moduleName: null,
         headerDir: null,
       });
     } finally {
@@ -639,6 +664,7 @@ describe('readPodspecNames', () => {
       try {
         expect(readPodspecNames(file)).toEqual({
           name: podName,
+          moduleName: null,
           headerDir: null,
         });
       } finally {
@@ -652,12 +678,54 @@ describe('readPodspecNames', () => {
     try {
       expect(readPodspecNames(file)).toEqual({
         name: 'react-native-foo',
+        moduleName: null,
         headerDir: null,
       });
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   });
+
+  it('reads a module_name the pod name alone would lose (react-native-maps)', () => {
+    // Without this field the fast path answers with the dashed pod name and
+    // `pod ipc spec` never runs, so nothing downstream can see `module_name`.
+    const {file, dir} = writeFixture('rnmaps.podspec', MAPS_LIKE_PODSPEC);
+    try {
+      expect(readPodspecNames(file)).toEqual({
+        name: 'react-native-maps',
+        moduleName: 'ReactNativeMaps',
+        headerDir: null,
+      });
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it.each([
+    ['interpolation', 's.module_name = "#{package[\'name\']}"'],
+    ['a Ruby call', 's.module_name = File.basename(__dir__)'],
+  ])(
+    'reports nothing when the podspec computes its module_name with %s',
+    (_label, declaration) => {
+      // Same trap as a computed header_dir: the pod name is literal, but naming
+      // from it would ignore the module_name only Ruby can produce.
+      const {file, dir} = writeFixture(
+        'computed-module-name.podspec',
+        [
+          'Pod::Spec.new do |s|',
+          '  s.name = "react-native-maps"',
+          `  ${declaration}`,
+          'end',
+          '',
+        ].join('\n'),
+      );
+      try {
+        expect(readPodspecNames(file)).toBeNull();
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    },
+  );
 
   it('reports nothing when the podspec computes its header_dir in Ruby', () => {
     // The literal name must not satisfy the fast path: `header_dir` outranks it,

@@ -1217,7 +1217,7 @@ describe('main() — autolinking plugin host exemption', () => {
     expect(run).toThrow(/'react-native-y'/);
     expect(run).toThrow(/'expo'/);
     expect(run).toThrow(/autolinking plugin/);
-    expect(run).toThrow(/spm\.dependencies/);
+    expect(run).toThrow(/declared as a SwiftPM dependency/);
   });
 
   it('leaves a self-managed dependent alone — its own Package.swift declares its package references, so RN emits none', () => {

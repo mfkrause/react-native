@@ -26,7 +26,7 @@ const {
   resolveSwiftName,
 } = require('../expand-spm-dependencies');
 const {toSwiftName} = require('../spm-utils');
-const {readSwiftpmConfig} = require('../swiftpm-config');
+const {readSwiftpmConfig, writeSwiftpmName} = require('../swiftpm-config');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -51,6 +51,16 @@ function resolve(library) {
   return resolveSwiftName(
     library.npmName,
     readSwiftpmConfig(root, null),
+    defaultReadPodspec(root, null),
+  );
+}
+
+// The same, ignoring the declared name — what the podspec on its own says.
+function resolveFromPodspec(library) {
+  const root = path.join(REPO_ROOT, library.dir);
+  return resolveSwiftName(
+    library.npmName,
+    null,
     defaultReadPodspec(root, null),
   );
 }
@@ -84,13 +94,34 @@ describe('in-repo SwiftPM library names', () => {
     LIBRARIES.map(library => [library.npmName, resolve(library).name]),
   );
 
-  it('names each library from its podspec, not its npm package name', () => {
+  it('names each library from its declared name, not its npm package name', () => {
     expect(resolved.get('react-native-test-library-common')).toBe(
       'TestLibraryCommon',
     );
     expect(resolved.get('react-native-test-library-apple')).toBe(
       'TestLibraryApple',
     );
+  });
+
+  it('declares each name in package.json, so `spm scaffold` writes nothing', () => {
+    // scaffold records a podspec-derived name in the library's package.json.
+    // These two are tracked files, so a name they do not already declare makes
+    // every scaffold run — CI's included — dirty the checkout.
+    for (const library of LIBRARIES) {
+      const root = path.join(REPO_ROOT, library.dir);
+      expect(resolve(library).source).toBe('config');
+      expect(
+        writeSwiftpmName(root, resolved.get(library.npmName), {dryRun: true}),
+      ).toBe('already-set');
+    }
+  });
+
+  it('declares the same name its podspec derives, so CocoaPods agrees', () => {
+    for (const library of LIBRARIES) {
+      expect(resolveFromPodspec(library).name).toBe(
+        resolved.get(library.npmName),
+      );
+    }
   });
 
   it('imports each sibling under the name the autolinker resolves for it', () => {

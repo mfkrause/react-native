@@ -1385,7 +1385,7 @@ function main(argv /*:: ?: Array<string> */) /*: void */ {
         const dependents = pluginHostDependents.get(dep.name);
         if (dependents != null) {
           throw new Error(
-            `react-native autolinking: '${dep.name}' ships an SPM autolinking plugin, which owns its native contribution — so React Native does not build it as a sibling target for anything to depend on. It is declared in 'spm.dependencies' by ${dependents.map(name => `'${name}'`).join(', ')}. Remove it there; nothing is lost. Its plugin links its products into the app and resolves its own ecosystem's dependencies, so a library that builds against it does not declare it here.`,
+            `react-native autolinking: '${dep.name}' ships an SPM autolinking plugin, which owns its native contribution — so React Native does not build it as a sibling target for anything to depend on. It is declared as a SwiftPM dependency by ${dependents.map(name => `'${name}'`).join(', ')}. Remove it there; nothing is lost. Its plugin links its products into the app and resolves its own ecosystem's dependencies, so a library that builds against it does not declare it here.`,
           );
         }
         log(

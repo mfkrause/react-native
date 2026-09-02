@@ -63,7 +63,12 @@ type ResolveDep = (name: string, fromRoot: string) => ?string;
 // says, or the npm-name guess.
 type ResolvedSwiftName = {name: string, source: 'config' | 'podspec' | 'npm'};
 // The podspec fields that name a library. A PodspecModel satisfies it.
-type PodspecFacts = {readonly name?: ?string, readonly headerDir?: ?string, ...};
+type PodspecFacts = {
+  readonly name?: ?string,
+  readonly moduleName?: ?string,
+  readonly headerDir?: ?string,
+  ...
+};
 type ReadPodspec = (root: string, podspecPath: ?string) => ?PodspecFacts;
 type ReadSwiftpmConfig = (root: string, rnConfig: ?RnConfig) => ?SwiftpmConfig;
 // Keyed by swiftNameKey, valued with the canonical spelling: a name that only
@@ -110,7 +115,16 @@ function podspecSwiftName(
   npmName /*: string */,
   podspec /*: ?PodspecFacts */,
 ) /*: ?string */ {
-  for (const candidate of [podspec?.headerDir, podspec?.name]) {
+  // CocoaPods' own order is `module_name` first (specification.rb), but our
+  // single name is the ObjC include prefix as well as the Swift module: a
+  // declared `header_dir` IS the prefix a library's consumers write, so it keeps
+  // winning. `module_name` comes next, being what Swift and `@import` consumers
+  // spell, and the pod name — often dashed — is the last resort.
+  for (const candidate of [
+    podspec?.headerDir,
+    podspec?.moduleName,
+    podspec?.name,
+  ]) {
     if (typeof candidate !== 'string' || candidate.length === 0) {
       continue;
     }
@@ -137,10 +151,9 @@ function podspecSwiftName(
  * The Swift target name for one dep, which is also the prefix its headers are
  * imported under (`#import <Name/Header.h>`), and where it came from. The name
  * a library declares wins; the podspec is the transitional source of truth
- * behind it — `react-native-svg` publishes `RNSVG`, not `ReactNativeSvg` — with
- * `header_dir` ahead of the pod name, since that is what a library sets when
- * the two differ. The npm name is the last resort, for a library that ships a
- * `Package.swift` and no podspec.
+ * behind it — `react-native-svg` publishes `RNSVG`, not `ReactNativeSvg` — in
+ * the order `header_dir` → `module_name` → pod name. The npm name is the last
+ * resort, for a library that ships a `Package.swift` and no podspec.
  *
  * The source is what tells the scaffolder which names are safe to write into a
  * library's package.json: a derived one, never a guessed one.
@@ -166,9 +179,17 @@ function resolveSwiftName(
   }
 
   const fromPodspec = podspecSwiftName(npmName, podspec);
-  return fromPodspec != null
-    ? {name: fromPodspec, source: 'podspec'}
-    : {name: toSwiftName(npmName), source: 'npm'};
+  if (fromPodspec != null) {
+    return {name: fromPodspec, source: 'podspec'};
+  }
+  const fromNpm = toSwiftName(npmName);
+  if (podspec != null) {
+    warn(
+      `'${npmName}' ships a podspec React Native could not read a name from (CocoaPods may not be installed), so it is named '${fromNpm}' after its npm package instead. ` +
+        `A machine that can read the podspec may resolve a different name — set 'swiftpmConfig.name' in ${npmName}'s package.json to settle it everywhere.`,
+    );
+  }
+  return {name: fromNpm, source: 'npm'};
 }
 
 function collisionDiagnosis(
@@ -309,7 +330,7 @@ function expandSpmDependencies(
         const transitiveRoot = resolveDep(transitiveName, current.root);
         if (transitiveRoot == null) {
           throw new Error(
-            `react-native autolinking: '${currentName}' declares an unresolvable spm.dependency '${transitiveName}'. Ensure '${transitiveName}' is installed and visible via Node module resolution from ${current.root}.`,
+            `react-native autolinking: '${currentName}' declares an unresolvable SwiftPM dependency '${transitiveName}'. Ensure '${transitiveName}' is installed and visible via Node module resolution from ${current.root}.`,
           );
         }
 
