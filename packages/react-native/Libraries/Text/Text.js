@@ -134,7 +134,7 @@ const TextImpl: component(
     if (_accessibilityState == null) {
       _accessibilityState = {disabled};
     } else {
-      _accessibilityState.disabled = _disabled;
+      _accessibilityState = {..._accessibilityState, disabled: _disabled};
     }
   }
 
