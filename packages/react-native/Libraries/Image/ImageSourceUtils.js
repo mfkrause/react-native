@@ -89,7 +89,13 @@ export function getImageSourcesFromImageProps(imageProps: ImageProps):
     sources = [{uri: src, headers: headers, width, height}];
   } else if (source != null && source.uri && Object.keys(headers).length > 0) {
     const sourceHeaders = (source as ImageURISource).headers;
-    sources = [{...source, headers: {...sourceHeaders, ...headers}}];
+    sources = [
+      {
+        ...source,
+        headers:
+          sourceHeaders != null ? {...sourceHeaders, ...headers} : headers,
+      },
+    ];
   } else {
     sources = source;
   }
