@@ -11,7 +11,7 @@
 import '@react-native/fantom/src/setUpDefaultReactNativeEnvironment';
 
 import type {HostInstance} from 'react-native';
-import type {AccessibilityProps} from 'react-native';
+import type {AccessibilityProps, AccessibilityState} from 'react-native';
 
 import ensureInstance from '../../../src/private/__tests__/utilities/ensureInstance';
 import * as Fantom from '@react-native/fantom';
@@ -594,7 +594,7 @@ describe('<Text>', () => {
 
     describe('accessibilityState', () => {
       it('does not mutate the prop when disabled overrides it', () => {
-        const accessibilityState = {disabled: false};
+        const accessibilityState: AccessibilityState = {disabled: false};
         const root = Fantom.createRoot();
 
         Fantom.runTask(() => {
